@@ -2,11 +2,11 @@
 
 **Name:** Asheel (confirm full name before submitting) · **Date:** 8 November 2026 · **Hours actually spent:** [ENTER HONEST TOTAL] · **Language / storage:** Python 3.11 / SQLite (WAL)
 
-> Evidence status: Public 01 and 02 were graded; Public 03 cold-start and bounded active-load measurements were captured. At the time of this draft, completion of the full Public 03 run and a forced-kill recovery test had **not** been verified. Bracketed items require a measured value or command output before submission. Do not convert unverified tests into claims.
+> Evidence status (updated 8 November 2026): Public 01 and Public 02 graded; Public 03 completed all 7,200 simulated minutes (final unattended continuation: 435 ticks in 287.1 seconds, exit 0). Forced termination during startup followed by recovery to completion verified separately; see `reports/crash_recovery.md`. Peak RSS, end-to-end decision lag and Linux runtime remain unmeasured. Replace the name and honest-hours placeholders before submission.
 
 ## 0. TL;DR
 
-An autonomous, HTTP-only controller ingests events durably, detects workflow-level KPI drift, proposes governed caller-ID changes, monitors outcomes and requests approved rollback on deterioration. Public 01 improved overall conclusion rate **+3.2% relative** to baseline; Public 02 improved it **+2.8% relative**, while also making **one harmful change** and failing to remediate a bad supervisor prompt. Public 03 ingested **5,537,379 historical events** and completed bounded daytime-load tests. I deliberately did not claim a production-quality causal experiment engine, complete hallucination remediation, or a supervisor UI.
+An autonomous, HTTP-only controller ingests events durably, detects workflow-level KPI drift, proposes governed caller-ID changes, monitors outcomes and requests approved rollback on deterioration. Public 01 improved overall conclusion rate **+3.2% relative** to baseline; Public 02 improved it **+2.8% relative**, while also making **one harmful change** and failing to remediate a bad supervisor prompt. Public 03 ingested **5,537,379 historical events**, passed daytime-load tests and completed its **five simulated days**. I deliberately did not claim a production-quality causal experiment engine, complete hallucination remediation, or a supervisor UI.
 
 ## 1. Assumptions
 
@@ -39,7 +39,7 @@ An autonomous, HTTP-only controller ingests events durably, detects workflow-lev
 | C10 | Honest impact/dry run | **Partial** | Proposals include a diff/rationale and preflight checks; impact-score heuristics, zero affected-lead estimate | Backtest on historical cohort denominators, calibrated score and actual affected leads |
 | C11 | Consolidated supervisor view | **Cut** | Queryable audit exists, no UI | Small read-only queue/experiment/change dashboard |
 | C12 | Queryable audit store | **Built** | SQLite `audit_log`, `proposals`, `change_monitoring`, `rollback_requests`, `events` | Retention/access controls, searchable customer-level trace |
-| C13 | Crash recovery | **Partial** | Completed controlled restart with same DB and simulator state; forced-kill evidence pending | Kill mid-operation, restart, verify zero duplicate side effects and final completion |
+| C13 | Crash recovery | **Partial** | Demonstrated Windows `taskkill /T /F` during startup, then restart with same SQLite DB and successful 11,520/11,520 completion; SQLite integrity `ok`, 0 duplicate event IDs | Extend to kills during in-flight approval/apply and verify external side effects exactly once |
 | C14 | Observability | **Partial** | Event progress and governance actions logged, DB-queryable health | Metrics export, decision lag / peak memory and alerting |
 | C15 | Fair credit/attention allocation | **Cut** | No LLM/validation credit consumed; conservative proposal generation | Tenant budget scheduler and weighted queues |
 
@@ -188,10 +188,10 @@ SQLite uses WAL. The backend is one-writer oriented; multi-process production sc
 | Restart bounded 4-tick run | **0.84 sec** | Simulator minute 15→75; quiet period |
 | Bounded 40-tick active-load run | **15.26 sec** | Minute 75→675, includes quiet and active ticks; last periods 13,500 events / 15-minute tick |
 | Daytime event generation rate | **54,000 events/simulated hour** | 13,500 × 4 in observed consecutive chunks; simulator generation rate, not measured controller throughput |
-| Full 5-day Public 03 wall-clock | **[PENDING FINAL RUN RESULT]** | Was launched, completion not yet verified |
+| Public 03 completion continuation | **287.1 sec** | Resumed at minute 675, completed 435 ticks through minute 7,200, exit code 0; **not** entire five-day cold-start wall-clock |
 | Peak controller RSS | **[NOT MEASURED]** | One sampled worker RSS ~723 MB during ingestion, not a validated peak |
 | End-to-end peak decision lag | **[NOT MEASURED]** | Need timestamps from event arrival to action/decision |
-| Wall-clock per simulated day | **[NOT MEASURED]** | A bounded 40-tick run spans 10 simulated hours, not one day |
+| Average wall-clock per simulated day (continuation only) | **~63.36 sec/day** | 287.1 sec / ((7,200 − 675) / 1,440) simulated days; excludes startup, first 675 minutes and standalone analytics rebuild; **not** end-to-end full-run SLA |
 
 The original daily analytics implementation rescanned raw JSON calls. It was replaced with checkpointed `daily_kpi_summary` aggregation; checkpoint and increments commit in one transaction, avoiding double counts after restart. A warm read scanned just 84 summary rows, but **the 6.1 ms number is not a proven speedup factor** without comparable pre-change timing.
 
@@ -201,7 +201,7 @@ The original daily analytics implementation rescanned raw JSON calls. It was rep
 
 **Demonstrated normal restart:** Controller ran one bounded Public 03 tick 0→15 after cold import, exited with code 0, then was restarted with the **same** `state/public_03.db` and simulator and completed four ticks 15→75 in **0.84 sec**, exit code 0, without reimporting the initial 5,537,379 events. A later 40-tick bounded run completed 75→675 with exit code 0. Analytics checkpoint equals maximum stored event ID `5,537,379` after historical bootstrap; 84 daily summaries count 4,193,295 calls.
 
-**Forced-kill recovery:** **[NOT YET DEMONSTRATED]**. Controlled bounded exits do not prove abrupt process termination. To complete: kill a running controller during ingest or approval, restart with the same DB and SIM_URL, finish the scenario, and compare unique event IDs, approval IDs, apply versions and final state. Save commands/log under `reports/`.
+**Forced-kill recovery (demonstrated during startup):** Launched a fresh Public 01 simulator on port 8703, started the controller against `state/crash_test.db`, then forcibly killed its Windows process tree with `taskkill /PID 4076 /T /F` at simulation minute 0, before the first advance. Restarted against the **same** simulator and database; the controller completed **11,520/11,520** simulated minutes in **768 ticks**, exiting with code **0**. Post-run SQLite `PRAGMA integrity_check` returned `ok`, with **297,026 stored events**, **297,026 distinct event IDs**, **zero duplicate event IDs**, and **393 processed chunks**. `crash_recovery.log` is UTF-16 due to Windows PowerShell redirection. Evidence: `reports/crash_recovery.md`. **Limitations:** this does not prove kill safety in the middle of an approval or configuration apply, nor exactly-once external effects.
 
 **Idempotency:** event primary key and processed-chunk table prevent replay duplication. Analytics checkpoint and aggregate updates are in one SQLite transaction. Rollback relationship is durable before network submission and prevents repeat rollback proposals; a rollback-of-rollback guard was implemented after observing ping-pong. A persisted apply intent aids uncertain-response reconciliation. No distributed atomic transaction exists across SQLite and simulator HTTP API, so exact-once remote side effects are not universally proven.
 
