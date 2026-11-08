@@ -1,0 +1,60 @@
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local simulator runs
+runs/
+
+# Controller persistent state
+controller_state.db
+controller_state.db-*
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+
+# Local test logs
+*.log
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Generated reports and temporary files
+*.tmp
+*.bak
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+state/
+# Local simulation data
+runs/
+state/
+controller_state.db*
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Secrets and environment
+.env
+.env.*
